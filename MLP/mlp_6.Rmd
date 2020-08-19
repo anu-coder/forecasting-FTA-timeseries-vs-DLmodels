@@ -1,0 +1,53 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+FTA_DL_train <-  window(Deseasonalised_log_tourism, end = c(2019,06))
+FTA_DL_test <- window(Deseasonalised_log_tourism, start= c(2019,07))
+plot(FTA_DL_train)
+lines(FTA_DL_test, col = "red")
+```
+```{r}
+set.seed(1)
+library(nnfor)
+fit_mlp_6=mlp(FTA_DL_train,lags=1:12,hd.auto.type="valid",hd.max=15,reps = 50, outplot = T)
+print(fit_mlp_6)
+```
+```{r}
+print(fit_mlp_6)
+```
+```{r}
+plot(fit_mlp_6)
+```
+
+```{r}
+for_mlp_6= forecast(fit_mlp_6,h=6)
+print(for_mlp_6)
+```
+
+```{r}
+PRED_ACTtable6 <- data.frame(Predict = as.numeric(for_mlp_6$mean), as.numeric(FTA_DL_test))
+colnames(PRED_ACTtable6) <- c("Predict", "Actual")
+PRED_ACTtable6
+```
+```{r}
+Predict6 <- exp(PRED_ACTtable6$Predict+S_index[7:12])
+Predict6
+Actual6 <- window(tourism, start= c(2019,07), end = c(2019,12))
+Actual_predict_table6 <- data.frame(Predict = Predict6, Actual = Actual6)
+Actual_predict_table6
+```
+```{r}
+rmse6 <- sqrt(mean((Predict6-Actual6)^2))
+rmse6
+mape6 <- mean(abs(Predict6- Actual6)/abs(Actual6))*100
+mape6
+```
+
+```{r}
+plot(fit_mlp_6$MSEH, ylab="Mean Squared Error", xlab="Number of neurons")
+lines(fit_mlp_6$MSEH)
+```
+

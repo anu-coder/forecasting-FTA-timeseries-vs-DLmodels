@@ -1,0 +1,263 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Step 1 : 
+#### Loading the Data
+#### Plotting the data 
+#### Conclusion
+
+```{r}
+tourism.data=readxl::read_xlsx("Tourism_new.xlsx")
+head(tourism.data)
+```
+
+```{r}
+dim(tourism.data)
+```
+
+
+```{r}
+tail(tourism.data)
+```
+
+
+```{r}
+# Monthly Seasonality (frequency set to 12 for monthly data)
+tourism <- ts(Tourism_new[11:394,2],start= c(1988),end = c(2019,12),frequency=12)
+tourism
+
+```
+```{r}
+tourism=df2
+```
+
+
+```{r}
+plot(tourism)
+```
+The graph clearly shows a seasonality and an increasing trend i.e. a multiplicative variance. So to remove the variance, to convert it into a additive series, we need to find the log returns of the series. Let us first plot the log returns of the series and see how it looks. 
+
+```{r}
+log_tourism <- log(tourism)
+plot(log_tourism)
+```
+```{r}
+Dlt_test_actual <- window(tourism, start= c(2018))
+```
+
+
+## Step 2 : Dummy fit => Ratio to MA => stationarity check!
+
+#### a) Here we shall fit a dummy to find out if there is seasonality
+#### b) If seasonality exists we will use Ratio to MA to remove the seasonality
+#### c) then we shall check for non stochastic trend, and remove it finally.
+
+##### a) Checking the existence of seasonality using dummy indices. 
+
+```{r}
+# all libraries required, some dependencies are there.
+library(caret)
+library(lattice)
+library(ggplot2)
+library(mltools)
+library(data.table)
+
+```
+```{r results="hide" , message=FALSE, warningFALSE}
+library(zoo)
+as.yearmon(time(log_tourism)) #this statement finds the year and months
+
+# Saving the months in  a vector
+p <- month.abb[cycle(log_tourism)]
+
+# Changing the months into factors
+p <- as.factor(p)
+
+# fitting dummy using mltools package
+# the dummy variable is a list
+
+dmy <- one_hot(as.data.table(p))
+t <- 1:length(log_tourism)
+# Setting the dummies and creating a dataframe
+m <- as.matrix(log_tourism)
+X <- cbind(as.data.frame(m), t, as.data.frame(dmy))
+names(X)[1] <- "Y"
+head(X, n= 10)
+
+```
+```{r}
+summary(lm(Y~.,data = X))
+```
+
+The lm summary shows that many of the seasonal coefficients are significant showing that it has got a seasonality.
+Next we apply *Ratio to MA filter*
+
+```{r, message= FALSE , warning = FALSE}
+library(astsa)
+library(forecast)
+MA <- ma(log_tourism, 12, centre = T)
+id <- seq(1,length(log_tourism),1)
+detrended <- log_tourism-MA
+head(detrended, n = 10)
+tail(detrended, n= 10)
+```
+```{r}
+FTA_mat <- as.data.frame(matrix(detrended, nrow = 32, ncol= 12, byrow = T))
+colnames(FTA_mat) <- month.name
+rownames(FTA_mat) <- 1988:2019
+S <- colMeans(FTA_mat, na.rm = T)
+S_mean <- mean(S)
+S_index <- S - S_mean
+S_index
+Deseasonalised_log_tourism <- log_tourism-S_index
+Deseasonalised_log_tourism
+
+```
+```{r}
+plot(log_tourism, main = "FTA from 1998 - 2019(log transformed)", ylab = "Number of tourists")
+```
+```{r}
+plot(Deseasonalised_log_tourism, main = "Deseasonalised FTA 1998-2019 ", ylab = "Number FT")
+
+```
+```{r}
+plot(log_tourism, main = "FTA from 1988 - 2019(original = black, Deseasoned = Red)", ylab = "Number of tourists")
+lines(Deseasonalised_log_tourism, col = "red")
+```
+```{r}
+FTA_DL_train <-  window(Deseasonalised_log_tourism, end = c(2017,12))
+FTA_DL_test <- window(Deseasonalised_log_tourism, start= c(2018))
+plot(FTA_DL_train)
+lines(FTA_DL_test, col = "red")
+```
+```{r}
+library(urca)
+summary(ur.df(Deseasonalised_log_tourism, type = "trend", lags = 15, selectlags = "AIC"))
+```
+```{r}
+diff1_Deaseasoned_log_tourism <- diff(Deseasonalised_log_tourism)
+```
+```{r}
+library(urca)
+summary(ur.df(diff1_Deaseasoned_log_tourism, type = "trend", lags = 15, selectlags = "AIC"))
+```
+This shows that the modulus of the test statistic is 2.08 < 3.98 so we can say that our data has got a unit root, i.e.stochastic trend which needs to be removed first.
+
+For that we take the first lag difference.
+
+```{r}
+diff1_Deaseasoned_log_tourism <- diff(Deseasonalised_log_tourism)
+```
+
+Now again we shall check if there is still a stochastic trend. 
+We will confirm the same using the *Augmented Dickey Fuller test*
+
+```{r}
+library(urca)
+summary(ur.df(diff1_Deaseasoned_log_tourism, type = "trend", lags = 15, selectlags = "AIC"))
+```
+
+This shows that the modulus of the test statistic is 9.6332 > 3.98 so we can say that our data has no unit root, i.e. stochastic trend is not there any more.
+
+*Note:* Here the function has automatically chosen the lag which takes the lowest AIC, and calculates accordingly.
+
+Now we fit a linear trend to the data to check if there is any deterministic trend.
+
+```{r}
+model_select <- function(y, x ,poly.deg)
+{
+  model <- lm(y~poly(x,poly.deg))
+  return(summary(model))
+  
+}
+t=seq.int(1,length(diff1_Deaseasoned_log_tourism),1)
+y <- diff1_Deaseasoned_log_tourism
+```
+
+Fitting a trend model: $y_t = a+ bt + u_t$
+
+```{r}
+model_select(y,t,1)
+```
+
+Well this shows that we can fail to reject the null hypothesis that is the coefficient b = 0, so here apparently there does not exist a deterministic trend as such in the data. 
+
+Now that the process is stationary from a *Trend Stationary process*, we proceed forward to building the model. 
+
+## Step 4 : Sample Dividing Procedure. 
+
+Now we shall divide the data into *In sample* and *Out Sample*, we shall keep 30 years for the training (in) sample and rest 2 years for forecasting (out sample). 
+
+```{r}
+Dlt_train <-  window(diff1_Deaseasoned_log_tourism, end = c(2017,12))
+Dlt_test <- window(diff1_Deaseasoned_log_tourism, start= c(2018))
+plot(Dlt_train)
+lines(Dlt_test,col= "red")
+```
+```{r}
+set.seed(1)
+library(nnfor)
+fit_mlp=mlp(FTA_DL_train,lags=1:12,hd.auto.type="valid",hd.max=15,reps = 50, outplot = T)
+print(fit_mlp)
+```
+
+
+```{r}
+print(fit_mlp)
+```
+```{r}
+plot(fit_mlp)
+```
+
+```{r}
+for_mlp= forecast(fit_mlp,h=24)
+print(for_mlp)
+```
+```{r}
+PRED_ACTtable <- data.frame(Predict = as.numeric(for_mlp$mean), as.numeric(FTA_DL_test))
+colnames(PRED_ACTtable) <- c("Predict", "Actual")
+PRED_ACTtable
+```
+
+```{r}
+rmse_DL <- sqrt(mean((PRED_ACTtable$Predict- PRED_ACTtable$Actual)^2))
+rmse_DL
+mape_DL <- mean(abs(PRED_ACTtable$Predict- PRED_ACTtable$Actual)/abs(PRED_ACTtable$Actual))*100
+mape_DL
+```
+```{r}
+plot(PRED_ACTtable$Actual)
+lines(PRED_ACTtable$Predict, col = "red")
+```
+
+
+```{r}
+Predict <- exp(PRED_ACTtable$Predict+S_index)
+Predict
+Actual <- window(tourism, start= c(2018), end = c(2019,12))
+Actual_predict_table <- data.frame(Predict = Predict, Actual = Actual)
+Actual_predict_table
+```
+
+
+```{r}
+plot(Actual)
+lines(Predict, col = "red")
+```
+
+```{r}
+rmse <- sqrt(mean((Predict-Actual)^2))
+rmse
+mape <- mean(abs(Predict- Actual)/abs(Actual))*100
+mape
+```
+```{r}
+plot(fit_mlp$MSEH, ylab="Mean Squared Error", xlab="Number of neurons")
+lines(fit_mlp$MSEH)
+```
+```{r}
+fit_mlp$MSEH
+```
+

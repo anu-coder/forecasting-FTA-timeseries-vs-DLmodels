@@ -1,0 +1,404 @@
+---
+title: "6 months prediction"
+output: html_notebook
+---
+
+
+## Step 1 : 
+#### Loading the Data
+#### Plotting the data 
+#### Conclusion
+
+```{r}
+tourism.data=readxl::read_xlsx("Tourism_new.xlsx")
+head(tourism.data, n=12)
+```
+
+```{r}
+dim(tourism.data)
+```
+
+
+```{r}
+tail(tourism.data)
+```
+
+
+```{r}
+# Monthly Seasonality (frequency set to 12 for monthly data)
+#tourism <- ts(tourism.data[11:394,2],start= c(1988),end = c(2019,12),frequency=12)
+
+tourism.ts <- ts(tourism.data[,2],start= c(1987,03 ),end = c(2019,12),frequency=12)
+tourism <- window(tourism.ts, start= c(1988))
+tourism
+
+```
+
+
+```{r}
+plot(tourism)
+```
+The graph clearly shows a seasonality and an increasing trend i.e. a multiplicative variance. So to remove the variance, to convert it into a additive series, we need to find the log returns of the series. Let us first plot the log returns of the series and see how it looks. 
+
+```{r}
+log_tourism <- log(tourism)
+plot(log_tourism)
+```
+```{r}
+Dlt_test_actual <- window(tourism, start= c(2018))
+```
+
+
+## Step 2 : Dummy fit => Ratio to MA => stationarity check!
+
+#### a) Here we shall fit a dummy to find out if there is seasonality
+#### b) If seasonality exists we will use Ratio to MA to remove the seasonality
+#### c) then we shall check for non stochastic trend, and remove it finally.
+
+##### a) Checking the existence of seasonality using dummy indices. 
+
+```{r}
+# all libraries required, some dependencies are there.
+library(caret)
+library(lattice)
+library(ggplot2)
+library(mltools)
+library(data.table)
+
+```
+
+
+```{r results="hide" , message=FALSE, warningFALSE}
+library(zoo)
+as.yearmon(time(log_tourism)) #this statement finds the year and months
+
+# Saving the months in  a vector
+p <- month.abb[cycle(log_tourism)]
+
+# Changing the months into factors
+p <- as.factor(p)
+
+# fitting dummy using mltools package
+# the dummy variable is a list
+
+dmy <- one_hot(as.data.table(p))
+t <- 1:length(log_tourism)
+# Setting the dummies and creating a dataframe
+m <- as.matrix(log_tourism)
+X <- cbind(as.data.frame(m), t, as.data.frame(dmy))
+names(X)[1] <- "Y"
+head(X, n= 10)
+
+```
+
+```{r}
+summary(lm(Y~.,data = X))
+```
+
+The lm summary shows that many of the seasonal coefficients are significant showing that it has got a seasonality.
+Next we apply *Ratio to MA filter*
+
+```{r, message= FALSE , warning = FALSE}
+library(astsa)
+library(forecast)
+MA <- ma(log_tourism, 12, centre = T)
+id <- seq(1,length(log_tourism),1)
+detrended <- log_tourism-MA
+head(detrended, n = 10)
+tail(detrended, n= 10)
+```
+
+```{r}
+FTA_mat <- as.data.frame(matrix(detrended, nrow = 32, ncol= 12, byrow = T))
+colnames(FTA_mat) <- month.name
+rownames(FTA_mat) <- 1988:2019
+S <- colMeans(FTA_mat, na.rm = T)
+S_mean <- mean(S)
+S_index <- S - S_mean
+S_index
+Deseasonalised_log_tourism <- log_tourism-S_index
+Deseasonalised_log_tourism
+
+```
+
+
+```{r}
+plot(log_tourism, main = "FTA from 1998 - 2019(log transformed)", ylab = "Number of tourists")
+```
+
+```{r}
+plot(Deseasonalised_log_tourism, main = "Deseasonalised FTA 1998-2019 ", ylab = "Number FT")
+
+```
+
+```{r}
+plot(log_tourism, main = "FTA from 1988 - 2019(original = black, Deseasoned = Red)", ylab = "Number of tourists")
+lines(Deseasonalised_log_tourism, col = "red")
+```
+This shows how the seasonal peaks are removed. 
+Now we shall check if there is still a stochastic trend. 
+We will confirm the same using the *Augmented Dickey Fuller test*
+
+```{r}
+FTA_DL_train <-  window(Deseasonalised_log_tourism, end = c(2019,06))
+FTA_DL_test <- window(Deseasonalised_log_tourism, start= c(2019,07))
+plot(FTA_DL_train)
+lines(FTA_DL_test, col = "red")
+```
+
+
+```{r}
+library(urca)
+summary(ur.df(Deseasonalised_log_tourism, type = "trend", lags = 15, selectlags = "AIC"))
+```
+
+This shows that the modulus of the test statistic is 2.08 < 3.98 so we can say that our data has got a unit root, i.e.stochastic trend which needs to be removed first.
+
+For that we take the first lag difference.
+
+```{r}
+diff1_Deaseasoned_log_tourism <- diff(Deseasonalised_log_tourism)
+```
+
+Now again we shall check if there is still a stochastic trend. 
+We will confirm the same using the *Augmented Dickey Fuller test*
+
+```{r}
+library(urca)
+summary(ur.df(diff1_Deaseasoned_log_tourism, type = "trend", lags = 15, selectlags = "AIC"))
+```
+
+This shows that the modulus of the test statistic is 9.6332 > 3.98 so we can say that our data has no unit root, i.e. stochastic trend is not there any more.
+
+*Note:* Here the function has automatically chosen the lag which takes the lowest AIC, and calculates accordingly.
+
+Now we fit a linear trend to the data to check if there is any deterministic trend.
+
+```{r}
+model_select <- function(y, x ,poly.deg)
+{
+  model <- lm(y~poly(x,poly.deg))
+  return(summary(model))
+  
+}
+t=seq.int(1,length(diff1_Deaseasoned_log_tourism),1)
+y <- diff1_Deaseasoned_log_tourism
+```
+
+Fitting a trend model: $y_t = a+ bt + u_t$
+
+```{r}
+model_select(y,t,1)
+```
+
+Well this shows that we can fail to reject the null hypothesis that is the coefficient b = 0, so here apparently there does not exist a deterministic trend as such in the data. 
+
+Now that the process is stationary from a *Trend Stationary process*, we proceed forward to building the model. 
+
+## Step 4 : Sample Dividing Procedure. 
+
+Now we shall divide the data into *In sample* and *Out Sample*, we shall keep 30 years for the training (in) sample and rest 2 years for forecasting (out sample). 
+
+```{r}
+Dlt_train <-  window(diff1_Deaseasoned_log_tourism, end = c(2019,06))
+Dlt_test <- window(diff1_Deaseasoned_log_tourism, start= c(2019,07))
+plot(Dlt_train)
+lines(Dlt_test,col= "red")
+```
+
+
+
+## Step 4 : The ACF analysis. 
+
+Here we shall make a table calculating all the acf, its test statistic and draw conclusion accordingly.
+Here we can consider the max lag as <= 0.05*length of the data.
+refer (@article{article,
+author = {Burns, Patrick},
+year = {2002},
+month = {10},
+pages = {},
+title = {Robustness of the Ljung-Box Test and Its Rank Equivalent},
+journal = {SSRN Electronic Journal},
+doi = {10.2139/ssrn.443560}
+})
+
+```{r}
+n <- length(Dlt_train)
+max_lag <- floor(0.05*n)  
+max_lag
+```
+
+```{r}
+acf(Dlt_train, lag.max = max_lag)
+```
+
+```{r}
+rho <- acf(Dlt_train, lag.max = max_lag, plot = F)
+length(rho$acf)
+```
+
+##### Ljung-Box test: 
+
+*Null Hypothesis:* $H_0$: at a given lag k, the acf coefficients $\rho_0= \rho_1= ... =\rho_k=0$.
+                   $H_1$: Coefficients != 0
+
+*Note :* In statistical hypothesis testing, the __p-value__ or probability value is the probability of obtaining test results at least as extreme as the results actually observed, assuming that the null hypothesis is correct. So here, the P-value of the test is the probability that a __chi-square test statistic__ having the respective degrees of freedom is more extreme than the obtained test statistic.
+
+*Interpret results:* If the P-value is less than the significance level (0.05), we reject the null hypothesis.
+
+```{r}
+k <- max_lag+1
+Qt <- t(sapply(1:k,function(i) Box.test(Dlt_train, lag = i, type = "Ljung-Box")))
+Qt <- as.data.frame(Qt)
+
+result <- NULL
+
+for(i in 1:k){
+  if(Qt$p.value[[i]] < 0.05){
+  result[i] <- "reject"
+  
+} else {result[i] <- "accept"} 
+}
+result
+acf_table <- data.frame(k= 1:k, sample_acf = rho$acf, p_values=as.numeric(Qt$p.value), test_statistic = as.numeric(Qt$statistic), result = as.vector(result))
+head(acf_table)
+View(acf_table)
+```
+
+```{r}
+pacf(Dlt_train, lag.max = max_lag)
+```
+Here the *PACF* follows a standard normal distribution and we shall check the significance at 5% significance level which is 1.96. So we reject the Null hypothesis if the |test statistic| > 1.96 then we shall reject the null hypothesis. 
+
+
+```{r}
+phi <- pacf(Dlt_train, lag.max = max_lag, plot = F)
+length(phi$acf)
+Qt <- as.numeric(phi$acf*sqrt(n))
+Qt <- abs(Qt)
+result <- NULL
+
+for(i in 1:max_lag){
+  if(Qt[i] > 1.96){
+  result[i] <- "reject"
+  } else {result[i] <- "accept"} 
+}
+result
+pacf_table <- data.frame(k= 1:max_lag, sample_pacf = phi$acf,  test_statistic = Qt, result = as.vector(result))
+head(pacf_table)
+View(pacf_table)
+```
+
+```{r}
+ar.burg(Dlt_train)
+```
+This auto selects the AR model, this shows that the AR model is AR(10)
+
+```{r}
+model <- arima(FTA_DL_train, order= c(10,1,0))
+
+```
+
+
+```{r}
+AR_10_resid <- na.omit(model$residuals)
+acf(AR_10_resid, lag.max = max_lag, plot = T)
+AR_10_resid
+```
+```{r}
+parameter <- sum(eval((model$call$order)))
+resid_acf <- acf(AR_10_resid, lag.max = 27, plot = F)
+Rt <- t(sapply(1:28,function(i) Box.test(AR_10_resid, lag = i, type = "Ljung-Box", fitdf = parameter)))
+Rt <- as.data.frame(Rt)
+result <- NULL
+
+for(i in (parameter+1):28)
+  {
+  if(Rt$p.value[[i]] < 0.01){
+  result[i] <- "reject"
+  
+} else {result[i] <- "accept"} 
+}
+residual_table <- cbind(K= 1:(28-parameter),na.omit(data.frame( 
+                            RESIDUAL_ACF = resid_acf$acf, 
+                             P_VALUES=as.numeric(Rt$p.value), 
+                             TEST_STATISTIC = as.numeric(Rt$statistic), 
+                             RESULT = as.vector(result))) 
+                            )
+View(residual_table)
+```
+
+
+```{r}
+resid_acf <- acf(AR_10_resid, lag.max = 27, plot = F)
+Rt <- t(sapply(1:28,function(i) Box.test(AR_10_resid, lag = i, type = "Ljung-Box", fitdf = parameter)))
+Rt <- as.data.frame(Rt)
+
+result <- NULL
+
+for(i in (parameter+1):28){
+  if(Rt$p.value[[i]] < 0.01){
+  result[i] <- "reject"
+  
+} else {result[i] <- "accept"} 
+}
+result
+residual_table <- data.frame(k= 1:28, sample_acf = resid_acf$acf, p_values=as.numeric(Rt$p.value), test_statistic = as.numeric(Rt$statistic), result = as.vector(result))
+head(residual_table)
+View(residual_table)
+```
+
+This shows that our model fit is *Good enough* as the null hypothesis is rejected showing that the residue is plain white noise present. 
+
+```{r}
+library(lmtest)
+library(zoo)
+coeftest(model)
+```
+This shows that 6 among the 10 coeffs of the model is significant. 
+
+```{r}
+Pred.arima <- sarima.for(FTA_DL_train, n.ahead = 6 , p = 10, d = 1, q= 0, P=0, D= 0, Q= 0, 12)
+```
+
+
+```{r}
+PRED_ACTtable <- data.frame(Predict = Pred.arima$pred, FTA_DL_test)
+colnames(PRED_ACTtable) <- c("Predict", "Actual")
+PRED_ACTtable
+```
+
+
+```{r}
+rmse_DL <- sqrt(mean((PRED_ACTtable$Predict- PRED_ACTtable$Actual)^2))
+rmse_DL
+mape_DL <- mean(abs(PRED_ACTtable$Predict- PRED_ACTtable$Actual)/abs(PRED_ACTtable$Actual))*100
+mape_DL
+
+```
+
+
+
+
+```{r}
+Predict <- exp(PRED_ACTtable$Predict+S_index[7:12])
+Predict
+Actual <- window(tourism, start= c(2019,07), end = c(2019,12))
+Actual_predict_table <- data.frame(Predict = Predict, Actual = Actual)
+View(Actual_predict_table)
+```
+
+
+```{r}
+plot(Actual)
+lines(Predict, col = "red")
+```
+
+```{r}
+rmse <- sqrt(mean((Predict-Actual)^2))
+rmse
+mape <- mean(abs(Predict- Actual)/abs(Actual))*100
+mape
+```
+
+
