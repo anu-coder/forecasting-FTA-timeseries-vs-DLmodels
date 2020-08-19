@@ -17,6 +17,8 @@ To ensure that the models are accurately compared, we carried out all three mode
 
 On the basis of two well known performance matrices namely RMSE, MAPE, our findings suggested that for both the time horizons, 6 months and 24 months, the ANN models namely LSTM and MLP have outperformed the naive Auto Regressive time series model. The attached visualization shows the results. 
 
+![](https://github.com/anu-coder/forecasting-FTA-timeseries-vs-DLmodels/blob/master/Images/Pred_plot.jpeg)
+
 ## Conclusion: 
 
 The time series modelling is carried out to capture the persistence behavior of stationary series. We believe that the particular outcome that we obtained is due to the capacity of the Neural Network models to capture the noise or the persistence behavior better than time series model which is linear in parameter. This can be owing to the fact that the stationary series we obtained, still possessed a  certain level of unknown nonlinear dependencies. However, since the time series auto-regressive model could only capture the linear dependencies in the data, it could not perform as efficiently. On a concluding note of this small project, we can therefore say that, for modelling the foreign tourist arrival in India, ANN models (MLP & LSTM) perform better than a linear benchmark Auto Regressive time series model under stationary conditions. 
