@@ -9,6 +9,10 @@ At this age of globalization, the Travel and Tourism Industry (T &T) plays a vit
 
 The main objective of the project was to compare the performance efficiency of neural networks models namely Multilayer Perceptron (MLP) and Long Short Term Memory (LSTM) relative to linear Auto Regressive (AR) time series model for foreign tourist arrival in India. We have used two different forecasting windows of 6 months and 24 months to find out how well behaved our model performances are for short term and long term prediction. 
 
+## The data set:
+
+![](https://github.com/anu-coder/forecasting-FTA-timeseries-vs-DLmodels/blob/master/Images/Mainplot.jpeg)
+
 ## Procedure: 
 
 To ensure that the models are accurately compared, we carried out all three modelling on stationary time series. First, we have modelled the time series which turned out to be a AR(10). Next we have decided upon the structures our MLP model (9:2:1 and 9:1:1 for 24 months and 6 months prediction respectively) by choosing the minimum number of neurons through lowest MSE criterion. To maintain a parity in models we have used similar architecture in LSTM.
