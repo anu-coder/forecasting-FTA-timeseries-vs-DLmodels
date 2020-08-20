@@ -11,7 +11,9 @@ The main objective of the project was to compare the performance efficiency of n
 
 ## The data set:
 
-![](https://github.com/anu-coder/forecasting-FTA-timeseries-vs-DLmodels/blob/master/Images/Mainplot.jpeg)
+<p align = "center">
+<img src = "https://github.com/anu-coder/forecasting-FTA-timeseries-vs-DLmodels/blob/master/Images/Mainplot.jpeg">
+</p>
 
 ## Procedure: 
 
@@ -21,7 +23,9 @@ To ensure that the models are accurately compared, we carried out all three mode
 
 On the basis of two well known performance matrices namely RMSE, MAPE, our findings suggested that for both the time horizons, 6 months and 24 months, the ANN models namely LSTM and MLP have outperformed the naive Auto Regressive time series model. The attached visualization shows the results. 
 
-![](https://github.com/anu-coder/forecasting-FTA-timeseries-vs-DLmodels/blob/master/Images/Pred_plot.jpeg)
+<p align = "center">
+  <img src = "https://github.com/anu-coder/forecasting-FTA-timeseries-vs-DLmodels/blob/master/Images/Pred_plot.jpeg">
+</p>
 
 ## Conclusion: 
 
